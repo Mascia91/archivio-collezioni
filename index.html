@@ -279,6 +279,7 @@ function render(){
     : isWish ? 'La lista è vuota.<br>Aggiungi ciò che ti manca con il tasto ＋ e spunta “Non ce l’ho ancora”.' : 'Ancora nessun oggetto.<br>Premi ＋ per aggiungere il primo, oppure carica gli esempi da “Altro”.';
   $('#main').innerHTML = `
     <input class="field" id="q" type="search" placeholder="Cerca per nome, edizione, numero di serie…" value="${esc(query)}">
+    ${norm(query).length >= 2 ? `<button class="btn sec findbtn" id="q_arch" type="button">🔎 Cerca “${esc(query.trim())}” negli archivi</button>` : ''}
     ${nav}
     <div class="stats">
       <div class="stat"><b>${pcs(list)}</b><span>pezzi mostrati</span></div>
@@ -304,6 +305,26 @@ function render(){
     render();
   });
   if ($('#manage')) $('#manage').onclick = () => openManage(fBrand);
+  if ($('#q_arch')) $('#q_arch').onclick = () => archiveFromSearch(isWish);
+}
+
+/* Dalla barra di ricerca: cerca negli archivi e apre una scheda nuova già compilata */
+const ARCH_CHOICES = [['pokemon','⚡ Carte Pokémon'],['magic','🃏 Carte Magic (anche Signore degli Anelli)'],['book','📚 Libri e fumetti'],['funko','🧸 Funko']];
+function archiveFromSearch(wish){
+  const text = query.trim(), b = fBrand === 'Tutti' ? '' : fBrand, t = fType === 'Tutti' ? '' : fType;
+  const go = pv => openForm(null, wish, {name: text, find: true,
+    brand: pv === 'pokemon' ? 'Pokémon' : (b && !(pv === 'magic' && b === 'Pokémon') ? b : 'Altro'),
+    type: pv === 'book' ? (t === 'Fumetto / graphic novel' ? t : 'Libro') : pv === 'funko' ? 'Funko' : 'Carte'});
+  const pv = t ? providerFor(b, t) : null;      /* dentro una cartella con archivio: cerco subito lì */
+  if (pv) return go(pv);
+  const sug = providerFor(b, '');
+  $('#sheet').innerHTML = `<h2>Dove cerco “${esc(text)}”?</h2>
+    <div class="hint">${wish ? 'L’oggetto scelto finirà nella lista “Mi manca”.' : 'Si apre una scheda nuova già compilata: controlli e salvi.'}</div>
+    <div class="vars">${ARCH_CHOICES.map(([k, l]) => `<button type="button" data-arch="${k}"><span>${l}</span><b>${k === sug ? 'consigliato' : ''}</b></button>`).join('')}</div>
+    <div style="height:16px"></div><button class="btn sec" id="ar_no" type="button">Annulla</button>`;
+  $('#bg').classList.add('open');
+  $('#ar_no').onclick = closeForm;
+  document.querySelectorAll('[data-arch]').forEach(x => x.onclick = () => go(x.dataset.arch));
 }
 
 /* Piccola scheda per scrivere un nome (nuovo brand, nuova cartella, rinomina) */
@@ -399,14 +420,14 @@ let draftPhoto = '', draftRef = null;
 function opts(list, cur, empty){
   return (empty ? `<option value="">${empty}</option>` : '') + list.map(x => `<option ${x===cur?'selected':''}>${esc(x)}</option>`).join('');
 }
-function openForm(id, presetWish){
+function openForm(id, presetWish, preset){
   const it = id ? items.find(x => x.id === id) : null;
   draftPhoto = it?.photo || ''; draftRef = null;
-  const curB = it?.brand || (fBrand !== 'Tutti' ? fBrand : brands()[0]);
-  const curT = it ? (it.type || '') : (fType !== 'Tutti' ? fType : '');
+  const curB = it?.brand || preset?.brand || (fBrand !== 'Tutti' ? fBrand : brands()[0]);
+  const curT = it ? (it.type || '') : preset?.type ?? (fType !== 'Tutti' ? fType : '');
   $('#sheet').innerHTML = `
     <h2>${it ? 'Modifica oggetto' : 'Nuovo oggetto'}</h2>
-    <label for="f_name">Nome</label><input class="field" id="f_name" value="${esc(it?.name)}" placeholder="Es. Charizard Base Set, Bacchetta di Silente…" autocomplete="off">
+    <label for="f_name">Nome</label><input class="field" id="f_name" value="${esc(it?.name ?? preset?.name)}" placeholder="Es. Charizard Base Set, Bacchetta di Silente…" autocomplete="off">
     <div id="dupbox"></div>
     <button class="btn sec findbtn" id="f_find" type="button" hidden>🔎 Cerca la carta: foto, set, numero e prezzo</button>
     <div id="finder"></div>
@@ -510,7 +531,8 @@ function openForm(id, presetWish){
     await DB.put(rec); closeForm(); await reload(); toast(it ? 'Modifiche salvate' : 'Aggiunto ✔');
   };
   upd();
-  if (!it) setTimeout(() => $('#f_name').focus(), 50);
+  if (preset?.find) runFinder();
+  else if (!it) setTimeout(() => $('#f_name').focus(), 50);
 }
 function closeForm(){ $('#bg').classList.remove('open'); }
 
