@@ -1,6 +1,6 @@
 /* Tiene l'app disponibile anche senza internet (in fiera il segnale manca spesso).
    Prima prova la rete, così gli aggiornamenti arrivano subito; se non c'è, usa la copia salvata. */
-const CACHE = 'collezioni-v4';
+const CACHE = 'collezioni-v5';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

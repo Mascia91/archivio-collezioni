@@ -462,8 +462,8 @@ function openForm(id, presetWish){
     });
   };
   ['f_name','f_serial','f_edition'].forEach(k => $('#'+k).oninput = upd);
-  const updFind = () => { const t = $('#f_type').value; $('#f_find').hidden = !($('#f_brand').value === 'Pokémon' && (!t || CARD_TYPES.includes(t))); };
-  $('#f_find').onclick = () => findCards($('#f_name').value);
+  const updFind = () => { const pv = providerFor($('#f_brand').value, $('#f_type').value); $('#f_find').hidden = !pv; if (pv) $('#f_find').textContent = PROVIDERS[pv].btn; };
+  $('#f_find').onclick = runFinder;
   updFind();
 
   /* Nuovo brand / nuovo tipo: campo nella scheda */
@@ -514,36 +514,61 @@ function openForm(id, presetWish){
 }
 function closeForm(){ $('#bg').classList.remove('open'); }
 
-/* ---------- Archivio carte Pokémon (TCGdex: nomi in italiano, immagini, prezzi Cardmarket) ---------- */
-const TCG = 'https://api.tcgdex.net/v2/';
-const tcgCache = new Map();
-function tcgJson(url){
-  if (!tcgCache.has(url)) {
+/* ---------- Ricerca negli archivi pubblici: Pokémon (TCGdex), Magic (Scryfall), libri (Open Library), Funko (elenco aperto) ---------- */
+const jsonCache = new Map();
+function getJson(url){
+  if (!jsonCache.has(url)) {
     const p = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-    tcgCache.set(url, p); p.catch(() => tcgCache.delete(url));
+    jsonCache.set(url, p); p.catch(() => jsonCache.delete(url));
   }
-  return tcgCache.get(url);
+  return jsonCache.get(url);
 }
-/* "charizard base 4/102": prova il nome più lungo che dà risultati, il resto filtra per set e numero */
+
+/* Quale archivio usare per brand e cartella della scheda */
+function providerFor(brand, type){
+  if (brand === 'Pokémon' && (!type || CARD_TYPES.includes(type))) return 'pokemon';
+  if (type === 'Funko') return 'funko';
+  if (type === 'Libro' || type === 'Fumetto / graphic novel') return 'book';
+  if (type === 'Carte') return 'magic';
+  return null;
+}
+const PROVIDERS = {
+  pokemon: {btn:'🔎 Cerca la carta: foto, set, numero e prezzo', hint:'“Charizard”, “Pikachu base”, “Mew 4/102”', src:'Dati e immagini: TCGdex · prezzi medi Cardmarket', search: searchPokemon},
+  magic: {btn:'🔎 Cerca la carta Magic: foto, set, numero e prezzo', hint:'il nome inglese della carta, es. “Gandalf, Friend of the Shire”', src:'Dati e immagini: Scryfall · prezzi Cardmarket', search: searchMagic},
+  book: {btn:'🔎 Cerca il libro: copertina, autore, editore e ISBN', hint:'il titolo, oppure il codice ISBN sul retro', src:'Dati e copertine: Open Library', search: searchBooks},
+  funko: {btn:'🔎 Cerca il Funko: foto, numero e serie', hint:'il personaggio, es. “Gandalf”, “Demogorgon 428”', src:'Elenco aperto dei Funko, aggiornato a febbraio 2026 · foto hobbyDB', search: searchFunko},
+};
+
+/* Pokémon: "charizard base 4/102" prova il nome più lungo che dà risultati, il resto filtra per set e numero */
+const TCG = 'https://api.tcgdex.net/v2/';
 async function tcgSearch(text){
   const words = text.trim().split(/\s+/).filter(Boolean);
+  let fails = 0;
   for (let n = words.length; n >= 1; n--) {
     const name = encodeURIComponent(words.slice(0, n).join(' '));
-    const [it, en] = await Promise.all([tcgJson(`${TCG}it/cards?name=${name}`), tcgJson(`${TCG}en/cards?name=${name}`).catch(() => [])]);
-    if (!it.length && !en.length) continue;
-    const enImg = new Map(en.map(c => [c.id, c.image]));
+    const get = url => getJson(url).catch(() => getJson(url)).catch(() => null);   /* un secondo tentativo se l'archivio inciampa */
+    const [it, en] = await Promise.all([get(`${TCG}it/cards?name=${name}`), get(`${TCG}en/cards?name=${name}`)]);
+    if (!it && !en) { fails++; continue; }
+    if (!it?.length && !en?.length) continue;
+    const enImg = new Map((en || []).map(c => [c.id, c.image]));
     const all = new Map();
-    it.forEach(c => all.set(c.id, {id:c.id, lang:'it', img:c.image || enImg.get(c.id)}));
-    en.forEach(c => { if (!all.has(c.id)) all.set(c.id, {id:c.id, lang:'en', img:c.image}); });
-    return {list:[...all.values()], name: norm(words.slice(0, n).join(' ')), rest: norm(words.slice(n).join(' '))};
+    (it || []).forEach(c => all.set(c.id, {id:c.id, lang:'it', localId:c.localId, img:c.image || enImg.get(c.id)}));
+    (en || []).forEach(c => { if (!all.has(c.id)) all.set(c.id, {id:c.id, lang:'en', localId:c.localId, img:c.image}); });
+    let list = [...all.values()];
+    const rest = norm(words.slice(n).join(' '));
+    /* "58/102" o "58": leggo i dettagli solo delle carte con quel numero */
+    const num = (rest.match(/\d+/) || [])[0];
+    if (num) { const byNum = list.filter(x => String(x.localId).replace(/^0+/, '') === num.replace(/^0+/, '')); if (byNum.length) list = byNum; }
+    return {list: list.slice(0, 150), name: norm(words.slice(0, n).join(' ')), rest};
   }
-  return {list:[], rest:''};
+  if (fails) throw new Error('offline');
+  return {list:[], name:'', rest:''};
 }
-async function tcgDetails(list, onProgress){
+async function tcgDetails(list, progress){
   const out = []; let i = 0, done = 0;
   const work = async () => { while (i < list.length) { const x = list[i++];
-    try { out.push({...x, d: await tcgJson(`${TCG}${x.lang}/cards/${x.id}`)}); } catch {}
-    onProgress(++done, list.length); } };
+    try { out.push({...x, d: await getJson(`${TCG}${x.lang}/cards/${x.id}`)}); } catch {}
+    progress(`Leggo ${++done} di ${list.length} carte…`); } };
   await Promise.all(Array.from({length: 8}, work));
   return out;
 }
@@ -554,65 +579,135 @@ function variantsOf(d){
   return v;
 }
 const cardNum = d => d.localId + (d.set?.cardCount?.official ? '/' + d.set.cardCount.official : '');
+async function searchPokemon(text, progress){
+  const {list, name, rest} = await tcgSearch(text);
+  if (!list.length) return [];
+  const det = await tcgDetails(list, progress);
+  const words = rest.split(' ').filter(Boolean);
+  return det.filter(x => { const h = norm([x.d.set?.name, x.d.set?.id, cardNum(x.d), x.d.rarity].join(' ')); return words.every(w => h.includes(w)); })
+    .map(x => ({img: x.img && x.img + '/low.webp', full: x.img && x.img + '/high.webp', title: x.d.name, line1: x.d.set?.name || '',
+      line2: cardNum(x.d) + (x.d.rarity ? ' · ' + x.d.rarity : ''), variants: variantsOf(x.d), exact: norm(x.d.name) === name,
+      fill: {name: x.d.name, brand: 'Pokémon', type: 'Carte', edition: x.d.set?.name || '', serial: cardNum(x.d)}, ref: {src:'tcgdex', id: x.d.id}}))
+    .sort((a,b) => (b.exact - a.exact) || (!!b.img - !!a.img));
+}
 
-let finderRes = [];
-async function findCards(text){
-  const box = $('#finder');
-  if (norm(text).length < 2) { box.innerHTML = `<div class="finder"><div class="hint">Scrivi prima il nome della carta nel campo Nome (es. “Charizard”, “Pikachu base”, “Mew 4/102”).</div></div>`; $('#f_name').focus(); return; }
-  box.innerHTML = `<div class="finder"><div class="head"><b>Cerco “${esc(text)}”…</b></div><div class="hint" id="fprog"></div></div>`;
+/* Magic (anche le carte del Signore degli Anelli): tutte le stampe di una carta, con prezzi Cardmarket */
+const SF_LANG = {en:'Inglese', it:'Italiano', ja:'Giapponese', fr:'Francese', de:'Tedesco', es:'Spagnolo', pt:'Portoghese', zhs:'Cinese', zht:'Cinese', ko:'Coreano'};
+async function searchMagic(text){
+  let r;
+  try { r = await getJson(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(text.trim())}&unique=prints&order=released`); }
+  catch (e) { if (e.message === '404') return []; throw e; }
+  const n = norm(text);
+  return (r.data || []).slice(0, 120).map(c => {
+    const iu = c.image_uris || c.card_faces?.[0]?.image_uris || {};
+    const fin = c.finishes || [];
+    const v = [];
+    if (fin.includes('nonfoil') || !fin.length) v.push({label:'Normale', price: +c.prices?.eur || 0});
+    if (fin.includes('foil')) v.push({label:'Foil', price: +c.prices?.eur_foil || 0});
+    if (!v.length) v.push({label:'', price: 0});
+    return {img: iu.small, full: iu.normal, title: c.name, line1: c.set_name, line2: `${c.collector_number} · ${c.rarity}`, variants: v, exact: norm(c.name) === n,
+      fill: {name: c.name, type: 'Carte', edition: c.set_name, serial: String(c.collector_number), lang: SF_LANG[c.lang]}, ref: {src:'scryfall', id: c.id}};
+  }).sort((a,b) => b.exact - a.exact);
+}
+
+/* Libri: preferisce le edizioni italiane; accetta anche il codice ISBN */
+const LANG_OL = {ita:'Italiano', eng:'Inglese', jpn:'Giapponese', fre:'Francese', ger:'Tedesco', spa:'Spagnolo', por:'Portoghese', chi:'Cinese', kor:'Coreano'};
+async function searchBooks(text){
+  const t = text.trim(), isbn = t.replace(/[-\s]/g, '');
+  const q = /^\d{9}[\dXx]$|^\d{13}$/.test(isbn) ? `isbn:${isbn}` : t;
+  const f = 'key,title,author_name,first_publish_year,cover_i,editions,editions.key,editions.title,editions.isbn,editions.language,editions.publisher,editions.publish_date,editions.cover_i';
+  const r = await getJson(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&lang=it&limit=40&fields=${f}`);
+  return (r.docs || []).map(d => {
+    const e = d.editions?.docs?.[0] || {}, cover = e.cover_i || d.cover_i;
+    const isb = ((e.isbn || []).find(x => x.replace(/-/g, '').length === 13) || (e.isbn || [])[0] || '').replace(/-/g, '');
+    const year = (String(e.publish_date?.[0] || '').match(/\d{4}/) || [d.first_publish_year || ''])[0];
+    const author = (d.author_name || []).slice(0, 2).join(', '), pub = e.publisher?.[0] || '';
+    return {img: cover && `https://covers.openlibrary.org/b/id/${cover}-M.jpg`, full: cover && `https://covers.openlibrary.org/b/id/${cover}-L.jpg`,
+      title: e.title || d.title, line1: author, line2: [pub, year].filter(Boolean).join(' · '), variants: [{label:'', price:0}], exact: false,
+      fill: {name: e.title || d.title, type: 'Libro', edition: [author, pub, year].filter(Boolean).join(' · '), serial: isb ? 'ISBN ' + isb : '', lang: LANG_OL[(e.language || [])[0]]},
+      ref: {src:'openlibrary', id: e.key || d.key}};
+  }).sort((a,b) => !!b.img - !!a.img);
+}
+
+/* Funko: elenco aperto salvato nel sito (funko.json), scaricato solo la prima volta */
+let funkoData = null;
+async function searchFunko(text, progress){
+  if (!funkoData) { progress('Scarico l’elenco dei Funko (solo la prima volta, circa 1 MB)…'); funkoData = await getJson('funko.json'); }
+  const words = norm(text).split(' ').filter(Boolean), n = norm(text), out = [];
+  for (const [t, img, series] of funkoData.d) {
+    const h = norm(t + ' ' + series);
+    if (words.every(w => h.includes(w))) { out.push({t, img, series}); if (out.length >= 150) break; }
+  }
+  return out.map(x => {
+    const num = (x.t.match(/#\s?(\d+[a-z]?)/i) || [])[1];
+    const url = !x.img ? '' : x.img[0] === '!' ? x.img.slice(1) : funkoData.p + x.img;
+    return {img: url, full: url, title: x.t, line1: x.series || 'Funko Pop', line2: num ? '#' + num : '', variants: [{label:'', price:0}], exact: norm(x.t) === n,
+      fill: {name: x.t, type: 'Funko', edition: x.series, serial: num ? '#' + num : ''}, ref: {src:'funko-pop-data', id: x.t}};
+  }).sort((a,b) => b.exact - a.exact);
+}
+
+/* ---------- Finestra dei risultati, uguale per tutti gli archivi ---------- */
+let finderRes = [], finderProv = null;
+function finderMsg(title, text){
+  $('#finder').innerHTML = `<div class="finder"><div class="head"><b>${title}</b><button class="btn sec small" id="fx" type="button">Chiudi</button></div><div class="hint">${text}</div></div>`;
+  $('#fx').onclick = () => $('#finder').innerHTML = '';
+}
+async function runFinder(){
+  const prov = PROVIDERS[providerFor($('#f_brand').value, $('#f_type').value)];
+  if (!prov) return;
+  const text = $('#f_name').value.trim();
+  if (norm(text).length < 2) { finderMsg('Scrivi prima il nome', `Nel campo Nome scrivi ${prov.hint}, poi tocca di nuovo il tasto.`); $('#f_name').focus(); return; }
+  $('#finder').innerHTML = `<div class="finder"><div class="head"><b>Cerco “${esc(text)}”…</b></div><div class="hint" id="fprog"></div></div>`;
   try {
-    const {list, name, rest} = await tcgSearch(text);
-    if (!list.length) { box.innerHTML = `<div class="finder"><div class="head"><b>Nessuna carta trovata</b><button class="btn sec small" id="fx" type="button">Chiudi</button></div><div class="hint">Prova con il solo nome del Pokémon, senza set o numero.</div></div>`; $('#fx').onclick = () => box.innerHTML=''; return; }
-    const det = await tcgDetails(list, (d,t) => { const p = $('#fprog'); if (p) p.textContent = `Leggo ${d} di ${t} carte…`; });
-    const words = rest.split(' ').filter(Boolean);
-    finderRes = det.filter(x => { const h = norm([x.d.set?.name, x.d.set?.id, cardNum(x.d), x.d.rarity].join(' ')); return words.every(w => h.includes(w)); })
-      .sort((a,b) => ((norm(b.d.name) === name) - (norm(a.d.name) === name)) || (!!b.img - !!a.img));
-    renderFinder(text, rest);
+    finderProv = prov;
+    finderRes = await prov.search(text, msg => { const p = $('#fprog'); if (p) p.textContent = msg; });
+    if (!finderRes.length) return finderMsg('Nessun risultato', `Prova a scrivere meno parole, per esempio ${prov.hint}.`);
+    renderFinder();
   } catch {
-    box.innerHTML = `<div class="finder"><div class="head"><b>Archivio non raggiungibile</b><button class="btn sec small" id="fx" type="button">Chiudi</button></div><div class="hint">Serve una connessione a internet. Puoi salvare la scheda adesso e cercare la carta più tardi.</div></div>`;
-    $('#fx').onclick = () => box.innerHTML='';
+    finderMsg('Archivio non raggiungibile', 'Serve una connessione a internet. Puoi salvare la scheda adesso e cercare più tardi.');
   }
 }
-function renderFinder(text, rest){
-  const box = $('#finder');
+function renderFinder(){
+  const box = $('#finder'), many = finderRes.length > 12;
   box.innerHTML = `<div class="finder">
-    <div class="head"><b>${finderRes.length} carte trovate</b><button class="btn sec small" id="fx" type="button">Chiudi</button></div>
-    <div class="hint">Tocca quella giusta: compilo foto, set, numero e valore. ${!rest && finderRes.length > 12 ? 'Per restringere aggiungi il set o il numero al nome (es. “Charizard base”, “Charizard 4/102”).' : ''}</div>
-    <div class="grid">${finderRes.slice(0, 60).map((x,i) => { const v = variantsOf(x.d), p = Math.max(...v.map(y => y.price||0));
-      return `<button class="res" type="button" data-r="${i}">${x.img ? `<img src="${x.img}/low.webp" alt="" loading="lazy">` : '<div class="noimg">senza foto</div>'}
-      <span class="t">${esc(x.d.name)}</span><span class="s">${esc(x.d.set?.name||'')}</span><span class="s">${esc(cardNum(x.d))}${x.d.rarity?' · '+esc(x.d.rarity):''}</span>
+    <div class="head"><b>${finderRes.length}${finderRes.length >= 120 ? '+' : ''} risultati</b><button class="btn sec small" id="fx" type="button">Chiudi</button></div>
+    <div class="hint">Tocca quello giusto: compilo foto e dati. ${many ? `Per restringere scrivi più dettagli (${finderProv.hint}).` : ''}</div>
+    <div class="grid">${finderRes.slice(0, 60).map((r,i) => { const p = Math.max(...r.variants.map(y => y.price || 0));
+      return `<button class="res" type="button" data-r="${i}">${r.img ? `<img src="${esc(r.img)}" alt="" loading="lazy">` : '<div class="noimg">senza foto</div>'}
+      <span class="t">${esc(r.title)}</span><span class="s">${esc(r.line1)}</span><span class="s">${esc(r.line2) || '&nbsp;'}</span>
       <span class="p">${p ? '≈ '+money(p) : '&nbsp;'}</span></button>`; }).join('')}</div>
-    ${finderRes.length > 60 ? `<div class="hint">Mostro le prime 60: aggiungi set o numero per vedere le altre.</div>` : ''}
-    <div class="src">Dati e immagini: TCGdex · prezzi medi Cardmarket</div></div>`;
-  $('#fx').onclick = () => box.innerHTML='';
-  document.querySelectorAll('[data-r]').forEach(b => b.onclick = () => pickCard(finderRes[+b.dataset.r]));
+    ${finderRes.length > 60 ? `<div class="hint">Mostro i primi 60.</div>` : ''}
+    <div class="src">${finderProv.src}</div></div>`;
+  $('#fx').onclick = () => box.innerHTML = '';
+  document.querySelectorAll('[data-r]').forEach(b => b.onclick = () => pickResult(finderRes[+b.dataset.r]));
   box.scrollIntoView({block:'start', behavior:'smooth'});
 }
-function pickCard(x){
-  const v = variantsOf(x.d);
-  if (v.length < 2) return applyCard(x, v[0]);
+function pickResult(r){
+  const v = r.variants;
+  if (v.length < 2) return applyResult(r, v[0]);
   $('#finder').innerHTML = `<div class="finder"><div class="head"><b>Quale versione hai?</b><button class="btn sec small" id="fb" type="button">Indietro</button></div>
-    <div class="hint">${esc(x.d.name)} · ${esc(x.d.set?.name||'')} · ${esc(cardNum(x.d))}</div>
+    <div class="hint">${esc(r.title)} · ${esc(r.line1)} · ${esc(r.line2)}</div>
     <div class="vars">${v.map((y,i) => `<button type="button" data-v2="${i}"><span>${esc(y.label || 'Normale')}</span><b>${y.price ? '≈ '+money(y.price) : '—'}</b></button>`).join('')}</div></div>`;
-  $('#fb').onclick = () => renderFinder('', 'x');
-  document.querySelectorAll('[data-v2]').forEach(b => b.onclick = () => applyCard(x, v[+b.dataset.v2]));
+  $('#fb').onclick = renderFinder;
+  document.querySelectorAll('[data-v2]').forEach(b => b.onclick = () => applyResult(r, v[+b.dataset.v2]));
 }
-async function applyCard(x, v){
-  const d = x.d;
-  $('#f_name').value = d.name;
-  $('#f_brand').value = 'Pokémon';
-  if (!CARD_TYPES.includes($('#f_type').value)) $('#f_type').value = 'Carte';
-  $('#f_edition').value = [d.set?.name, v?.label].filter(Boolean).join(' · ');
-  $('#f_serial').value = cardNum(d);
+async function applyResult(r, v){
+  const f = r.fill, multi = r.variants.length > 1;
+  $('#f_name').value = f.name;
+  if (f.brand && $('#f_brand').value !== f.brand) { $('#f_brand').value = f.brand; $('#f_brand').dispatchEvent(new Event('change')); }
+  const t = $('#f_type').value;
+  if (!t || (f.type === 'Carte' && !CARD_TYPES.includes(t))) $('#f_type').value = f.type;
+  $('#f_edition').value = [f.edition, multi && v?.label !== 'Normale' ? v?.label : ''].filter(Boolean).join(' · ');
+  $('#f_serial').value = f.serial || '';
+  if (f.lang && !$('#f_lang').value) $('#f_lang').value = f.lang;
   if (v?.price) $('#f_value').value = Math.round(v.price * 100) / 100;
-  draftRef = {src:'tcgdex', id:d.id, variant:v?.label||'', priceAt:v?.at||null};
-  $('#finder').innerHTML = `<div class="finder"><div class="hint">✔ Compilato da archivio${v?.price ? ` · valore = media Cardmarket${v.at ? ' del '+new Date(v.at).toLocaleDateString('it-IT') : ''}` : ''}. Controlla e salva.</div></div>`;
+  draftRef = {...r.ref, variant: v?.label || '', priceAt: v?.at || null};
+  $('#finder').innerHTML = `<div class="finder"><div class="hint">✔ Compilato dall'archivio${v?.price ? ` · valore = prezzo medio Cardmarket${v.at ? ' del ' + new Date(v.at).toLocaleDateString('it-IT') : ''}` : ''}. Controlla e salva.</div></div>`;
   $('#f_name').dispatchEvent(new Event('input'));
-  $('#f_find').hidden = false;
-  if (x.img) {
+  if (r.full) {
     $('#f_thumb').textContent = '⏳';
-    try { const blob = await fetch(`${x.img}/high.webp`).then(r => { if (!r.ok) throw 0; return r.blob(); }); draftPhoto = await shrink(blob); }
-    catch { toast('Foto non scaricata: puoi aggiungerla a mano'); }
+    try { const blob = await fetch(r.full).then(x => { if (!x.ok) throw 0; return x.blob(); }); draftPhoto = await shrink(blob); }
+    catch { draftPhoto = r.full; toast('Foto collegata dal web: si vede quando c’è internet'); }   /* alcuni siti non permettono di salvarla */
     $('#f_thumb').innerHTML = draftPhoto ? `<img src="${draftPhoto}" alt="">` : '📷';
   }
 }
