@@ -83,6 +83,20 @@ nav button.plus i{background:var(--accent);color:var(--accent-ink);width:46px;he
 .hint{font-size:13px;color:var(--mute);margin:6px 0 10px}
 .inline{display:flex;gap:8px;margin-top:8px}
 .inline .field{flex:1}
+.sect{display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px;font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em}
+.link{border:0;background:none;color:var(--accent);font-size:14px;cursor:pointer;padding:4px 2px;text-transform:none;letter-spacing:0;font-weight:600}
+.folders{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.folder{display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;cursor:pointer;text-align:left;min-width:0}
+.folder i{font-style:normal;font-size:24px;line-height:1.2}
+.folder b{font-size:13px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.folder span{font-size:12px;color:var(--mute)}
+.folder.add,.chip.add{border-style:dashed;color:var(--accent);background:transparent}
+.crumb{display:flex;align-items:center;gap:8px;margin:12px 0 4px;font-size:15px;min-width:0}
+.crumb button{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:6px 12px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+.crumb b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.mrow>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mrow>span:last-child{display:flex;gap:6px;flex:0 0 auto}
 .findbtn{margin-top:10px}
 .finder{margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
 .finder .head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
@@ -125,8 +139,10 @@ const DB = (() => {
   let db;
   const open = () => new Promise((res, rej) => {
     if (db) return res(db);
-    const r = indexedDB.open('archivio-collezioni', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'id' });
+    const r = indexedDB.open('archivio-collezioni', 2);
+    r.onupgradeneeded = () => { const d = r.result;
+      if (!d.objectStoreNames.contains('items')) d.createObjectStore('items', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta'); };
     r.onsuccess = () => { db = r.result; res(db); };
     r.onerror = () => rej(r.error);
   });
@@ -142,6 +158,12 @@ const DB = (() => {
     putMany: arr => open().then(d => new Promise((res, rej) => {
       const t = d.transaction('items', 'readwrite'); const s = t.objectStore('items');
       arr.forEach(x => s.put(x)); t.oncomplete = res; t.onerror = () => rej(t.error);
+    })),
+    getMeta: k => open().then(d => new Promise((res, rej) => {
+      const q = d.transaction('meta').objectStore('meta').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+    })),
+    setMeta: (k, v) => open().then(d => new Promise((res, rej) => {
+      const t = d.transaction('meta', 'readwrite'); t.objectStore('meta').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error);
     }))
   };
 })();
@@ -152,6 +174,12 @@ const ICONS = {'Pokémon':'⚡','Il Signore degli Anelli':'💍','Harry Potter':
 const TYPES = ['Carte','Box / booster','Fumetto / graphic novel','Libro','Funko','Action figure / statua','Peluche','Videogioco','Gadget','Vintage','Altro'];
 const CONDS = ['Nuovo / sigillato','Come nuovo','Ottimo','Buono','Usato','Rovinato'];
 const CARD_TYPES = ['Carte','Box / booster'];
+const LANGS = ['Italiano','Inglese','Giapponese','Francese','Tedesco','Spagnolo','Portoghese','Cinese','Coreano','Altra'];
+const LANG_CODE = {Italiano:'ITA',Inglese:'ENG',Giapponese:'JAP',Francese:'FRA',Tedesco:'GER',Spagnolo:'SPA',Portoghese:'POR',Cinese:'CHN',Coreano:'KOR'};
+const TYPE_ICONS = {'Carte':'🃏','Box / booster':'📦','Fumetto / graphic novel':'📖','Libro':'📚','Funko':'🧸','Action figure / statua':'🦸','Peluche':'🐻','Videogioco':'🎮','Gadget':'🎁','Vintage':'📻','Altro':'🗂️'};
+/* Cartelle di partenza per i brand di Giangy: si possono rinominare o eliminare da "Gestisci" */
+const DEFAULT_SUBS = {'Pokémon':['Carte','Box / booster','Videogioco','Peluche','Funko'],'Il Signore degli Anelli':['Libro','Funko','Action figure / statua','Gadget'],
+  'Harry Potter':['Libro','Funko','Action figure / statua','Gadget'],'Minecraft':['Videogioco','Peluche','Gadget','Libro'],'Stranger Things':['Funko','Gadget','Libro'],'Altro':[]};
 
 /* Le schede della prima versione avevano una "collezione" per tipo: la trasformo in brand + tipo */
 const OLD_COLL = {'Pokémon':['Pokémon',''],'Carte collezionabili':['Altro','Carte'],'Graphic novel':['Altro','Fumetto / graphic novel'],
@@ -165,6 +193,8 @@ function migrate(i){
 }
 
 let items = [], view = 'coll', fBrand = 'Tutti', fType = 'Tutti', query = '';
+/* Brand e sottocartelle create da Giangy (anche vuote), salvate nell'archivio del telefono */
+let struct = {brands: [...BASE_BRANDS], subs: JSON.parse(JSON.stringify(DEFAULT_SUBS))};
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -172,8 +202,13 @@ const money = n => (Number(n)||0).toLocaleString('it-IT',{style:'currency',curre
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
 const icon = b => ICONS[b] || '📦';
-const brands = () => [...new Set([...BASE_BRANDS.filter(b => b !== 'Altro'), ...items.map(i => i.brand).filter(b => b && b !== 'Altro'), 'Altro'])];
-const types = () => [...new Set([...TYPES, ...items.map(i => i.type).filter(Boolean)])];
+const tIcon = t => TYPE_ICONS[t] || '📁';
+const brands = () => [...new Set([...struct.brands, ...items.map(i => i.brand)].filter(b => b && b !== 'Altro')), 'Altro'];
+const subsOf = b => [...new Set([...(struct.subs[b] || []), ...items.filter(i => i.brand === b && i.type).map(i => i.type)])];
+const typesFor = b => [...new Set([...subsOf(b), ...TYPES, ...items.map(i => i.type).filter(Boolean)])];
+async function saveStruct(){ try { await DB.setMeta('struct', struct); } catch {} }
+function addBrand(b){ if (!struct.brands.includes(b)) { const k = struct.brands.indexOf('Altro'); struct.brands.splice(k < 0 ? struct.brands.length : k, 0, b); } struct.subs[b] = struct.subs[b] || []; }
+function addSub(b, t){ if (!b || !t) return; addBrand(b); if (!struct.subs[b].includes(t)) struct.subs[b].push(t); }
 const pcs = l => l.reduce((a,i)=>a+(+i.qty||1),0);
 const sum = (l,k) => l.reduce((a,i)=>a+(+i[k]||0)*(+i.qty||1),0);
 function toast(t){ const e=$('#toast'); e.textContent=t; e.classList.add('show'); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove('show'),2400); }
@@ -217,30 +252,116 @@ function render(){
   const isWish = view === 'wish';
   $('#title').textContent = isWish ? 'Mi manca' : 'Archivio Collezioni';
   const base = isWish ? wish : owned;
+  const match = i => !query || norm([i.name,i.notes,i.brand,i.type,i.edition,i.serial,i.where,i.lang].join(' ')).includes(norm(query));
   const inBrand = base.filter(i => fBrand === 'Tutti' || i.brand === fBrand);
-  const list = inBrand.filter(i => (fType === 'Tutti' || i.type === fType) &&
-    (!query || norm([i.name,i.notes,i.brand,i.type,i.edition,i.serial,i.where].join(' ')).includes(norm(query)))).sort((a,b)=>b.added-a.added);
-  const usedB = ['Tutti', ...brands().filter(b => base.some(i => i.brand === b))];
-  const usedT = types().filter(t => inBrand.some(i => i.type === t));
+  const inType = i => fType === 'Tutti' || (fType === '' ? !i.type : i.type === fType);
+  const list = inBrand.filter(i => inType(i) && match(i)).sort((a,b)=>b.added-a.added);
+  const shownB = brands().filter(b => base.some(i => i.brand === b) || (!isWish && b !== 'Altro'));
   const worth = sum(list,'value');
+  let nav = '', head = '';
+  if (fType === 'Tutti') {
+    nav = `<div class="chips">${['Tutti', ...shownB].map(b => `<button class="chip ${b===fBrand?'on':''}" data-b="${esc(b)}">${b==='Tutti'?'Tutti i brand':icon(b)+' '+esc(b)}</button>`).join('')}${!isWish ? '<button class="chip add" id="addBrand" type="button">＋ Brand</button>' : ''}</div>`;
+  }
+  if (fBrand !== 'Tutti' && fType === 'Tutti') {
+    const tiles = subsOf(fBrand).map(t => ({t, n: pcs(inBrand.filter(i => i.type === t))}));
+    const loose = inBrand.filter(i => !i.type);
+    if (loose.length) tiles.push({t:'', n: pcs(loose)});
+    const vis = isWish ? tiles.filter(x => x.n) : tiles;
+    nav += `<div class="sect"><span>Cartelle di ${esc(fBrand)}</span>${!isWish ? '<button class="link" id="manage" type="button">Gestisci</button>' : ''}</div>
+      <div class="folders">${vis.map(x => `<button class="folder" type="button" data-t="${esc(x.t)}"><i>${x.t ? tIcon(x.t) : '📂'}</i><b>${x.t ? esc(x.t) : 'Senza cartella'}</b><span>${x.n} ${x.n === 1 ? 'pezzo' : 'pezzi'}</span></button>`).join('')}
+      ${!isWish ? '<button class="folder add" id="addSub" type="button"><i>＋</i><b>Aggiungi</b><span>cartella</span></button>' : ''}</div>`;
+    head = `<div class="sect"><span>Tutti gli oggetti di ${esc(fBrand)}</span></div>`;
+  }
+  if (fBrand !== 'Tutti' && fType !== 'Tutti') {
+    nav = `<div class="crumb"><button id="back" type="button">‹ ${icon(fBrand)} ${esc(fBrand)}</button><b>${fType ? tIcon(fType)+' '+esc(fType) : '📂 Senza cartella'}</b></div>`;
+  }
+  const empty = base.length ? (fType !== 'Tutti' && !query ? 'Questa cartella è vuota.<br>Premi ＋ per aggiungere un oggetto qui.' : 'Nessun risultato.')
+    : isWish ? 'La lista è vuota.<br>Aggiungi ciò che ti manca con il tasto ＋ e spunta “Non ce l’ho ancora”.' : 'Ancora nessun oggetto.<br>Premi ＋ per aggiungere il primo, oppure carica gli esempi da “Altro”.';
   $('#main').innerHTML = `
     <input class="field" id="q" type="search" placeholder="Cerca per nome, edizione, numero di serie…" value="${esc(query)}">
-    <div class="chips">${usedB.map(b => `<button class="chip ${b===fBrand?'on':''}" data-b="${esc(b)}">${b==='Tutti'?'Tutti i brand':icon(b)+' '+esc(b)}</button>`).join('')}</div>
-    ${usedT.length > 1 ? `<div class="chips types">${['Tutti',...usedT].map(t => `<button class="chip ${t===fType?'on':''}" data-t="${esc(t)}">${t==='Tutti'?'Tutti i tipi':esc(t)}</button>`).join('')}</div>` : ''}
+    ${nav}
     <div class="stats">
       <div class="stat"><b>${pcs(list)}</b><span>pezzi mostrati</span></div>
       <div class="stat"><b>${money(sum(list,'price'))}</b><span>${isWish?'costo stimato':'speso'}</span></div>
       ${worth?`<div class="stat"><b>${money(worth)}</b><span>valore stimato</span></div>`:''}
     </div>
-    <div class="list">${list.length ? list.map(row).join('') : `<div class="empty">${base.length ? 'Nessun risultato.' : isWish ? 'La lista è vuota.<br>Aggiungi ciò che ti manca con il tasto ＋ e spunta “Non ce l’ho ancora”.' : 'Ancora nessun oggetto.<br>Premi ＋ per aggiungere il primo, oppure carica gli esempi da “Altro”.'}</div>`}</div>`;
+    ${list.length ? head : ''}
+    <div class="list">${list.length ? list.map(row).join('') : `<div class="empty">${empty}</div>`}</div>`;
   const q = $('#q');
   q.oninput = () => { query = q.value; const p=q.selectionStart; render(); const n=$('#q'); n.focus(); n.setSelectionRange(p,p); };
   document.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { fBrand = b.dataset.b; fType = 'Tutti'; render(); });
-  document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { fType = b.dataset.t; render(); });
+  document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { fType = b.dataset.t; render(); window.scrollTo(0,0); });
   document.querySelectorAll('.item').forEach(b => b.onclick = () => openForm(b.dataset.id));
+  if ($('#back')) $('#back').onclick = () => { fType = 'Tutti'; render(); };
+  if ($('#addBrand')) $('#addBrand').onclick = () => askName('Nuovo brand', 'Es. Star Wars, Marvel, Zelda', async n => {
+    const ex = brands().find(b => norm(b) === norm(n));
+    if (ex) toast('Questo brand c’è già'); else { addBrand(n); await saveStruct(); toast(`Brand “${n}” creato`); }
+    fBrand = ex || n; fType = 'Tutti'; render();
+  });
+  if ($('#addSub')) $('#addSub').onclick = () => askName(`Nuova cartella in ${fBrand}`, 'Es. Poster, Tazze, Monete', async t => {
+    const ex = subsOf(fBrand).find(x => norm(x) === norm(t));
+    if (ex) toast('Questa cartella c’è già'); else { addSub(fBrand, t); await saveStruct(); toast(`Cartella “${t}” creata`); }
+    render();
+  });
+  if ($('#manage')) $('#manage').onclick = () => openManage(fBrand);
+}
+
+/* Piccola scheda per scrivere un nome (nuovo brand, nuova cartella, rinomina) */
+function askName(title, ph, ok, initial){
+  $('#sheet').innerHTML = `<h2>${esc(title)}</h2><label for="a_name">Nome</label><input class="field" id="a_name" placeholder="${esc(ph)}" value="${esc(initial||'')}" autocomplete="off">
+    <div style="height:16px"></div><div class="row"><button class="btn sec" id="a_no" type="button">Annulla</button><button class="btn" id="a_ok" type="button">Salva</button></div>`;
+  $('#bg').classList.add('open');
+  const go = () => { const n = $('#a_name').value.trim(); if (!n) return $('#a_name').focus(); closeForm(); ok(n); };
+  $('#a_ok').onclick = go; $('#a_no').onclick = closeForm;
+  $('#a_name').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+  setTimeout(() => $('#a_name').focus(), 50);
+}
+
+/* Gestisci un brand: rinomina brand e cartelle, elimina solo ciò che è vuoto */
+function openManage(b){
+  const inB = items.filter(i => i.brand === b), subs = subsOf(b);
+  $('#sheet').innerHTML = `<h2>Gestisci ${icon(b)} ${esc(b)}</h2>
+    <div class="hint">Brand e cartelle si eliminano solo quando sono vuoti, così non perdi nessun oggetto.</div>
+    <div class="mrow"><span><b>${esc(b)}</b> · ${inB.length} schede</span><span>${b !== 'Altro' ? '<button class="btn sec small" data-ren="1" type="button">Rinomina</button>' : ''}${!inB.length && b !== 'Altro' ? '<button class="btn danger small" data-delb="1" type="button">Elimina</button>' : ''}</span></div>
+    <label>Cartelle</label>
+    ${subs.map((t,k) => { const n = inB.filter(i => i.type === t).length;
+      return `<div class="mrow"><span>${tIcon(t)} ${esc(t)} · ${n} schede</span><span><button class="btn sec small" data-rens="${k}" type="button">Rinomina</button>${!n ? `<button class="btn danger small" data-dels="${k}" type="button">Elimina</button>` : ''}</span></div>`; }).join('') || '<div class="hint">Nessuna cartella.</div>'}
+    <div style="height:16px"></div><button class="btn sec" id="m_close" type="button">Chiudi</button>`;
+  $('#bg').classList.add('open');
+  $('#m_close').onclick = closeForm;
+  const ren = $('[data-ren]');
+  if (ren) ren.onclick = () => askName(`Rinomina ${b}`, '', async n => {
+    if (n === b) return openManage(b);
+    if (brands().some(x => norm(x) === norm(n))) { toast('Esiste già un brand con questo nome'); return openManage(b); }
+    const k = struct.brands.indexOf(b); if (k >= 0) struct.brands[k] = n; else addBrand(n);
+    struct.subs[n] = [...new Set([...(struct.subs[n] || []), ...(struct.subs[b] || [])])]; delete struct.subs[b];
+    const ch = items.filter(i => i.brand === b); ch.forEach(i => i.brand = n);
+    await DB.putMany(ch); await saveStruct(); fBrand = n; await reload(); toast('Brand rinominato'); openManage(n);
+  }, b);
+  const delb = $('[data-delb]');
+  if (delb) delb.onclick = async () => {
+    if (delb.dataset.sure !== '1') { delb.dataset.sure = '1'; delb.textContent = 'Sicuro?'; return; }
+    struct.brands = struct.brands.filter(x => x !== b); delete struct.subs[b];
+    await saveStruct(); fBrand = 'Tutti'; fType = 'Tutti'; closeForm(); render(); toast('Brand eliminato');
+  };
+  document.querySelectorAll('[data-rens]').forEach(btn => btn.onclick = () => { const t = subs[+btn.dataset.rens];
+    askName(`Rinomina cartella ${t}`, '', async n => {
+      if (n !== t) {
+        if (subs.some(x => norm(x) === norm(n) && x !== t)) { toast('Esiste già una cartella con questo nome'); return openManage(b); }
+        addSub(b, t); struct.subs[b] = struct.subs[b].map(x => x === t ? n : x);
+        const ch = items.filter(i => i.brand === b && i.type === t); ch.forEach(i => i.type = n);
+        await DB.putMany(ch); await saveStruct(); await reload(); toast('Cartella rinominata');
+      }
+      openManage(b);
+    }, t); });
+  document.querySelectorAll('[data-dels]').forEach(btn => btn.onclick = async () => {
+    if (btn.dataset.sure !== '1') { btn.dataset.sure = '1'; btn.textContent = 'Sicuro?'; return; }
+    const t = subs[+btn.dataset.dels]; struct.subs[b] = (struct.subs[b] || []).filter(x => x !== t);
+    await saveStruct(); render(); toast('Cartella eliminata'); openManage(b);
+  });
 }
 function row(i){
-  const sub = [i.brand, i.type, i.edition, i.cond].filter(Boolean).map(esc).join(' · ');
+  const sub = [i.brand, i.type, i.edition, LANG_CODE[i.lang], i.cond].filter(Boolean).map(esc).join(' · ');
   return `<button class="item" data-id="${i.id}">
     <div class="thumb">${i.photo ? `<img src="${i.photo}" alt="">` : icon(i.brand)}</div>
     <div class="meta"><div class="name">${esc(i.name)}</div><div class="line2">${sub}</div></div>
@@ -291,7 +412,7 @@ function openForm(id, presetWish){
     <div id="finder"></div>
     <div class="row">
       <div><label for="f_brand">Brand</label><select class="field" id="f_brand">${opts(brands(), curB)}<option value="__new">＋ Nuovo brand…</option></select></div>
-      <div><label for="f_type">Tipo</label><select class="field" id="f_type">${opts(types(), curT, '—')}<option value="__new">＋ Nuovo tipo…</option></select></div>
+      <div><label for="f_type">Cartella</label><select class="field" id="f_type">${opts(typesFor(curB), curT, '—')}<option value="__new">＋ Nuova cartella…</option></select></div>
     </div>
     <div id="newbox" class="inline" hidden><input class="field" id="f_newname" autocomplete="off"><button class="btn small" id="f_newok" type="button">Aggiungi</button></div>
     <div class="row">
@@ -306,7 +427,10 @@ function openForm(id, presetWish){
       <div><label for="f_edition">Edizione</label><input class="field" id="f_edition" value="${esc(it?.edition)}" placeholder="Es. 1ª ed., Base Set" autocomplete="off"></div>
       <div><label for="f_serial">Numero di serie</label><input class="field" id="f_serial" value="${esc(it?.serial)}" placeholder="Es. 4/102, #03" autocomplete="off"></div>
     </div>
-    <label for="f_where">Dove l'hai preso</label><input class="field" id="f_where" value="${esc(it?.where)}" placeholder="Es. Lucca Comics, eBay, mercatino" autocomplete="off">
+    <div class="row">
+      <div><label for="f_lang">Lingua</label><select class="field" id="f_lang">${opts(LANGS, it?.lang, '—')}</select></div>
+      <div><label for="f_where">Dove l'hai preso</label><input class="field" id="f_where" value="${esc(it?.where)}" placeholder="Es. Lucca Comics, eBay" autocomplete="off"></div>
+    </div>
     <label for="f_notes">Note (difetti, dettagli…)</label><textarea class="field" id="f_notes" rows="2">${esc(it?.notes)}</textarea>
     <label>Cerca prezzo e immagini sul web</label>
     <div class="web" id="weblinks"></div>
@@ -327,7 +451,7 @@ function openForm(id, presetWish){
     $('#weblinks').innerHTML = webLinks(name.trim(), brand, $('#f_type').value, $('#f_edition').value.trim()) || '<span class="hint">Scrivi il nome per vedere i link.</span>';
     const d = findDups(name, brand, it?.id, $('#f_serial').value);
     $('#dupbox').innerHTML = d.length ? `<div class="dup"><b>⚠️ Attento, forse ce l'hai già:</b>${d.slice(0,4).map(x =>
-      `<div class="m"><span>${esc(x.name)} <small>(${esc(x.brand)}${x.type?' · '+esc(x.type):''}${x.wish?', in lista “Mi manca”':', ×'+(x.qty||1)}${x.price?', '+money(x.price):''})</small></span>
+      `<div class="m"><span>${esc(x.name)} <small>(${esc(x.brand)}${x.type?' · '+esc(x.type):''}${x.lang?' · '+esc(x.lang):''}${x.wish?', in lista “Mi manca”':', ×'+(x.qty||1)}${x.price?', '+money(x.price):''})</small></span>
        ${!it && !x.wish ? `<button class="btn small" data-plus="${x.id}" type="button">+1</button>` : ''}
        ${!it && x.wish ? `<button class="btn small" data-got="${x.id}" type="button">Preso!</button>` : ''}</div>`).join('')}</div>` : '';
     document.querySelectorAll('[data-plus]').forEach(b => b.onclick = async () => {
@@ -353,8 +477,9 @@ function openForm(id, presetWish){
     adding = null; $('#newbox').hidden = true; upd();
   };
   let prevB = curB, prevT = curT;
-  $('#f_brand').onchange = () => { if ($('#f_brand').value === '__new') askNew('f_brand', prevB, 'Nome del brand (es. Star Wars)'); else prevB = $('#f_brand').value; upd(); updFind(); };
-  $('#f_type').onchange = () => { if ($('#f_type').value === '__new') askNew('f_type', prevT, 'Nome del tipo (es. Poster)'); else prevT = $('#f_type').value; upd(); updFind(); };
+  const fillTypes = b => { const keep = $('#f_type').value; $('#f_type').innerHTML = opts(typesFor(b), keep === '__new' ? '' : keep, '—') + '<option value="__new">＋ Nuova cartella…</option>'; };
+  $('#f_brand').onchange = () => { if ($('#f_brand').value === '__new') askNew('f_brand', prevB, 'Nome del brand (es. Star Wars)'); else { prevB = $('#f_brand').value; fillTypes(prevB); } upd(); updFind(); };
+  $('#f_type').onchange = () => { if ($('#f_type').value === '__new') askNew('f_type', prevT, 'Nome della cartella (es. Poster)'); else prevT = $('#f_type').value; upd(); updFind(); };
   $('#f_newok').onclick = confirmNew;
   $('#f_newname').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); confirmNew(); } };
 
@@ -378,9 +503,10 @@ function openForm(id, presetWish){
     const rec = { ...(it||{}), id: it?.id || uid(), name, brand: pick($('#f_brand').value) || 'Altro', type: pick($('#f_type').value),
       cond: $('#f_cond').value, qty: Math.max(1, parseInt($('#f_qty').value)||1),
       price: parseFloat($('#f_price').value)||0, value: parseFloat($('#f_value').value)||0,
-      edition: $('#f_edition').value.trim(), serial: $('#f_serial').value.trim(), where: $('#f_where').value.trim(),
+      edition: $('#f_edition').value.trim(), serial: $('#f_serial').value.trim(), where: $('#f_where').value.trim(), lang: $('#f_lang').value,
       notes: $('#f_notes').value.trim(), photo: draftPhoto, wish: $('#f_wish').checked, added: it?.added || Date.now(),
       ref: draftRef || it?.ref || null };
+    if (!struct.brands.includes(rec.brand) || (rec.type && !(struct.subs[rec.brand] || []).includes(rec.type))) { addBrand(rec.brand); addSub(rec.brand, rec.type); await saveStruct(); }
     await DB.put(rec); closeForm(); await reload(); toast(it ? 'Modifiche salvate' : 'Aggiunto ✔');
   };
   upd();
@@ -513,7 +639,7 @@ function download(name, blob){
 }
 const stamp = () => new Date().toISOString().slice(0,10);
 function backup(){
-  download(`archivio-collezioni-${stamp()}.json`, new Blob([JSON.stringify({v:2, items})], {type:'application/json'}));
+  download(`archivio-collezioni-${stamp()}.json`, new Blob([JSON.stringify({v:3, items, struct})], {type:'application/json'}));
   toast('Backup scaricato: mettilo al sicuro su Drive');
 }
 async function restore(file){
@@ -522,13 +648,14 @@ async function restore(file){
   try { data = JSON.parse(await file.text()); if (!Array.isArray(data.items)) throw 0; }
   catch { return toast('Questo file non è un backup dell’archivio'); }
   const recs = data.items.map(i => { migrate(i); delete i._mig; return i; });
+  if (data.struct?.brands) { data.struct.brands.forEach(addBrand); Object.entries(data.struct.subs || {}).forEach(([b, l]) => l.forEach(t => addSub(b, t))); await saveStruct(); }
   await DB.putMany(recs); await reload(); toast(`Ripristinate ${recs.length} schede ✔`);
 }
 function exportCsv(){
-  const h = ['Nome','Brand','Tipo','Edizione','Numero di serie','Condizione','Quantità','Prezzo pagato','Valore stimato','Dove preso','Note','Lista desideri'];
+  const h = ['Nome','Brand','Cartella','Edizione','Numero di serie','Lingua','Condizione','Quantità','Prezzo pagato','Valore stimato','Dove preso','Note','Lista desideri'];
   const q = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
   const n = v => String(v||0).replace('.',',');
-  const rows = items.map(i => [i.name,i.brand,i.type,i.edition,i.serial,i.cond,i.qty||1,n(i.price),n(i.value),i.where,i.notes,i.wish?'sì':'no'].map(q).join(';'));
+  const rows = items.map(i => [i.name,i.brand,i.type,i.edition,i.serial,i.lang,i.cond,i.qty||1,n(i.price),n(i.value),i.where,i.notes,i.wish?'sì':'no'].map(q).join(';'));
   download(`collezioni-${stamp()}.csv`, new Blob([String.fromCharCode(0xFEFF) + [h.map(q).join(';'), ...rows].join('\r\n')], {type:'text/csv;charset=utf-8'}));
   toast('CSV pronto per Excel');
 }
@@ -536,7 +663,7 @@ function exportCsv(){
 /* ---------- Esempi ---------- */
 async function loadDemo(){
   const d = (name, brand, type, cond, price, qty, edition, serial, wish) => ({id:uid(), name, brand, type, cond, price, qty, edition, serial,
-    notes:'', photo:'', wish:!!wish, value:wish?0:Math.round(price*1.4), where:wish?'':'Fiera', added:Date.now()-Math.random()*1e9, demo:true});
+    notes:'', lang:'Italiano', photo:'', wish:!!wish, value:wish?0:Math.round(price*1.4), where:wish?'':'Fiera', added:Date.now()-Math.random()*1e9, demo:true});
   await DB.putMany([
     d('Charizard','Pokémon','Carte','Ottimo',85,1,'Base Set','4/102'),
     d('Pikachu','Pokémon','Carte','Come nuovo',3,2,'Evoluzioni a Paldea','62/193'),
@@ -560,6 +687,8 @@ async function removeDemo(){
 
 /* ---------- Avvio ---------- */
 async function reload(){
+  if (!reload.done) { reload.done = true;
+    try { const st = await DB.getMeta('struct'); if (st?.brands) struct = st; else await saveStruct(); } catch {} }
   items = (await DB.all()).map(migrate);
   const mig = items.filter(i => i._mig);
   if (mig.length) { mig.forEach(i => delete i._mig); await DB.putMany(mig); }
