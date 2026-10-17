@@ -83,6 +83,20 @@ nav button.plus i{background:var(--accent);color:var(--accent-ink);width:46px;he
 .hint{font-size:13px;color:var(--mute);margin:6px 0 10px}
 .inline{display:flex;gap:8px;margin-top:8px}
 .inline .field{flex:1}
+.findbtn{margin-top:10px}
+.finder{margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.finder .head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
+.finder .head b{font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.res{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:6px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:3px;min-width:0}
+.res img,.res .noimg{width:100%;aspect-ratio:63/88;object-fit:contain;border-radius:6px;background:var(--line)}
+.res .noimg{display:grid;place-items:center;font-size:12px;color:var(--mute)}
+.res .t{font-size:12px;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res .s{font-size:11px;color:var(--mute);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res .p{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.vars{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.vars button{display:flex;justify-content:space-between;gap:10px;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px;cursor:pointer}
+.src{font-size:11px;color:var(--mute);margin-top:8px}
 .toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;z-index:20;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
 .toast.show{opacity:1}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -260,19 +274,21 @@ function renderMore(){
 }
 
 /* ---------- Scheda (aggiungi / modifica) ---------- */
-let draftPhoto = '';
+let draftPhoto = '', draftRef = null;
 function opts(list, cur, empty){
   return (empty ? `<option value="">${empty}</option>` : '') + list.map(x => `<option ${x===cur?'selected':''}>${esc(x)}</option>`).join('');
 }
 function openForm(id, presetWish){
   const it = id ? items.find(x => x.id === id) : null;
-  draftPhoto = it?.photo || '';
+  draftPhoto = it?.photo || ''; draftRef = null;
   const curB = it?.brand || (fBrand !== 'Tutti' ? fBrand : brands()[0]);
   const curT = it ? (it.type || '') : (fType !== 'Tutti' ? fType : '');
   $('#sheet').innerHTML = `
     <h2>${it ? 'Modifica oggetto' : 'Nuovo oggetto'}</h2>
     <label for="f_name">Nome</label><input class="field" id="f_name" value="${esc(it?.name)}" placeholder="Es. Charizard Base Set, Bacchetta di Silente…" autocomplete="off">
     <div id="dupbox"></div>
+    <button class="btn sec findbtn" id="f_find" type="button" hidden>🔎 Cerca la carta: foto, set, numero e prezzo</button>
+    <div id="finder"></div>
     <div class="row">
       <div><label for="f_brand">Brand</label><select class="field" id="f_brand">${opts(brands(), curB)}<option value="__new">＋ Nuovo brand…</option></select></div>
       <div><label for="f_type">Tipo</label><select class="field" id="f_type">${opts(types(), curT, '—')}<option value="__new">＋ Nuovo tipo…</option></select></div>
@@ -322,6 +338,9 @@ function openForm(id, presetWish){
     });
   };
   ['f_name','f_serial','f_edition'].forEach(k => $('#'+k).oninput = upd);
+  const updFind = () => { const t = $('#f_type').value; $('#f_find').hidden = !($('#f_brand').value === 'Pokémon' && (!t || CARD_TYPES.includes(t))); };
+  $('#f_find').onclick = () => findCards($('#f_name').value);
+  updFind();
 
   /* Nuovo brand / nuovo tipo: campo nella scheda */
   let adding = null;
@@ -334,8 +353,8 @@ function openForm(id, presetWish){
     adding = null; $('#newbox').hidden = true; upd();
   };
   let prevB = curB, prevT = curT;
-  $('#f_brand').onchange = () => { if ($('#f_brand').value === '__new') askNew('f_brand', prevB, 'Nome del brand (es. Star Wars)'); else prevB = $('#f_brand').value; upd(); };
-  $('#f_type').onchange = () => { if ($('#f_type').value === '__new') askNew('f_type', prevT, 'Nome del tipo (es. Poster)'); else prevT = $('#f_type').value; upd(); };
+  $('#f_brand').onchange = () => { if ($('#f_brand').value === '__new') askNew('f_brand', prevB, 'Nome del brand (es. Star Wars)'); else prevB = $('#f_brand').value; upd(); updFind(); };
+  $('#f_type').onchange = () => { if ($('#f_type').value === '__new') askNew('f_type', prevT, 'Nome del tipo (es. Poster)'); else prevT = $('#f_type').value; upd(); updFind(); };
   $('#f_newok').onclick = confirmNew;
   $('#f_newname').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); confirmNew(); } };
 
@@ -360,13 +379,117 @@ function openForm(id, presetWish){
       cond: $('#f_cond').value, qty: Math.max(1, parseInt($('#f_qty').value)||1),
       price: parseFloat($('#f_price').value)||0, value: parseFloat($('#f_value').value)||0,
       edition: $('#f_edition').value.trim(), serial: $('#f_serial').value.trim(), where: $('#f_where').value.trim(),
-      notes: $('#f_notes').value.trim(), photo: draftPhoto, wish: $('#f_wish').checked, added: it?.added || Date.now() };
+      notes: $('#f_notes').value.trim(), photo: draftPhoto, wish: $('#f_wish').checked, added: it?.added || Date.now(),
+      ref: draftRef || it?.ref || null };
     await DB.put(rec); closeForm(); await reload(); toast(it ? 'Modifiche salvate' : 'Aggiunto ✔');
   };
   upd();
   if (!it) setTimeout(() => $('#f_name').focus(), 50);
 }
 function closeForm(){ $('#bg').classList.remove('open'); }
+
+/* ---------- Archivio carte Pokémon (TCGdex: nomi in italiano, immagini, prezzi Cardmarket) ---------- */
+const TCG = 'https://api.tcgdex.net/v2/';
+const tcgCache = new Map();
+function tcgJson(url){
+  if (!tcgCache.has(url)) {
+    const p = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    tcgCache.set(url, p); p.catch(() => tcgCache.delete(url));
+  }
+  return tcgCache.get(url);
+}
+/* "charizard base 4/102": prova il nome più lungo che dà risultati, il resto filtra per set e numero */
+async function tcgSearch(text){
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  for (let n = words.length; n >= 1; n--) {
+    const name = encodeURIComponent(words.slice(0, n).join(' '));
+    const [it, en] = await Promise.all([tcgJson(`${TCG}it/cards?name=${name}`), tcgJson(`${TCG}en/cards?name=${name}`).catch(() => [])]);
+    if (!it.length && !en.length) continue;
+    const enImg = new Map(en.map(c => [c.id, c.image]));
+    const all = new Map();
+    it.forEach(c => all.set(c.id, {id:c.id, lang:'it', img:c.image || enImg.get(c.id)}));
+    en.forEach(c => { if (!all.has(c.id)) all.set(c.id, {id:c.id, lang:'en', img:c.image}); });
+    return {list:[...all.values()], name: norm(words.slice(0, n).join(' ')), rest: norm(words.slice(n).join(' '))};
+  }
+  return {list:[], rest:''};
+}
+async function tcgDetails(list, onProgress){
+  const out = []; let i = 0, done = 0;
+  const work = async () => { while (i < list.length) { const x = list[i++];
+    try { out.push({...x, d: await tcgJson(`${TCG}${x.lang}/cards/${x.id}`)}); } catch {}
+    onProgress(++done, list.length); } };
+  await Promise.all(Array.from({length: 8}, work));
+  return out;
+}
+const cmPrice = cm => cm ? (cm.avg30 || cm.avg || cm.trend || 0) : 0;
+function variantsOf(d){
+  const v = (d.variants_detailed || []).map(x => ({label: [x.type, x.subtype, ...(x.stamp||[])].filter(Boolean).join(' · '), price: cmPrice(x.pricing?.cardmarket), at: x.pricing?.cardmarket?.updated}));
+  if (!v.length) v.push({label:'', price: cmPrice(d.pricing?.cardmarket), at: d.pricing?.cardmarket?.updated});
+  return v;
+}
+const cardNum = d => d.localId + (d.set?.cardCount?.official ? '/' + d.set.cardCount.official : '');
+
+let finderRes = [];
+async function findCards(text){
+  const box = $('#finder');
+  if (norm(text).length < 2) { box.innerHTML = `<div class="finder"><div class="hint">Scrivi prima il nome della carta nel campo Nome (es. “Charizard”, “Pikachu base”, “Mew 4/102”).</div></div>`; $('#f_name').focus(); return; }
+  box.innerHTML = `<div class="finder"><div class="head"><b>Cerco “${esc(text)}”…</b></div><div class="hint" id="fprog"></div></div>`;
+  try {
+    const {list, name, rest} = await tcgSearch(text);
+    if (!list.length) { box.innerHTML = `<div class="finder"><div class="head"><b>Nessuna carta trovata</b><button class="btn sec small" id="fx" type="button">Chiudi</button></div><div class="hint">Prova con il solo nome del Pokémon, senza set o numero.</div></div>`; $('#fx').onclick = () => box.innerHTML=''; return; }
+    const det = await tcgDetails(list, (d,t) => { const p = $('#fprog'); if (p) p.textContent = `Leggo ${d} di ${t} carte…`; });
+    const words = rest.split(' ').filter(Boolean);
+    finderRes = det.filter(x => { const h = norm([x.d.set?.name, x.d.set?.id, cardNum(x.d), x.d.rarity].join(' ')); return words.every(w => h.includes(w)); })
+      .sort((a,b) => ((norm(b.d.name) === name) - (norm(a.d.name) === name)) || (!!b.img - !!a.img));
+    renderFinder(text, rest);
+  } catch {
+    box.innerHTML = `<div class="finder"><div class="head"><b>Archivio non raggiungibile</b><button class="btn sec small" id="fx" type="button">Chiudi</button></div><div class="hint">Serve una connessione a internet. Puoi salvare la scheda adesso e cercare la carta più tardi.</div></div>`;
+    $('#fx').onclick = () => box.innerHTML='';
+  }
+}
+function renderFinder(text, rest){
+  const box = $('#finder');
+  box.innerHTML = `<div class="finder">
+    <div class="head"><b>${finderRes.length} carte trovate</b><button class="btn sec small" id="fx" type="button">Chiudi</button></div>
+    <div class="hint">Tocca quella giusta: compilo foto, set, numero e valore. ${!rest && finderRes.length > 12 ? 'Per restringere aggiungi il set o il numero al nome (es. “Charizard base”, “Charizard 4/102”).' : ''}</div>
+    <div class="grid">${finderRes.slice(0, 60).map((x,i) => { const v = variantsOf(x.d), p = Math.max(...v.map(y => y.price||0));
+      return `<button class="res" type="button" data-r="${i}">${x.img ? `<img src="${x.img}/low.webp" alt="" loading="lazy">` : '<div class="noimg">senza foto</div>'}
+      <span class="t">${esc(x.d.name)}</span><span class="s">${esc(x.d.set?.name||'')}</span><span class="s">${esc(cardNum(x.d))}${x.d.rarity?' · '+esc(x.d.rarity):''}</span>
+      <span class="p">${p ? '≈ '+money(p) : '&nbsp;'}</span></button>`; }).join('')}</div>
+    ${finderRes.length > 60 ? `<div class="hint">Mostro le prime 60: aggiungi set o numero per vedere le altre.</div>` : ''}
+    <div class="src">Dati e immagini: TCGdex · prezzi medi Cardmarket</div></div>`;
+  $('#fx').onclick = () => box.innerHTML='';
+  document.querySelectorAll('[data-r]').forEach(b => b.onclick = () => pickCard(finderRes[+b.dataset.r]));
+  box.scrollIntoView({block:'start', behavior:'smooth'});
+}
+function pickCard(x){
+  const v = variantsOf(x.d);
+  if (v.length < 2) return applyCard(x, v[0]);
+  $('#finder').innerHTML = `<div class="finder"><div class="head"><b>Quale versione hai?</b><button class="btn sec small" id="fb" type="button">Indietro</button></div>
+    <div class="hint">${esc(x.d.name)} · ${esc(x.d.set?.name||'')} · ${esc(cardNum(x.d))}</div>
+    <div class="vars">${v.map((y,i) => `<button type="button" data-v2="${i}"><span>${esc(y.label || 'Normale')}</span><b>${y.price ? '≈ '+money(y.price) : '—'}</b></button>`).join('')}</div></div>`;
+  $('#fb').onclick = () => renderFinder('', 'x');
+  document.querySelectorAll('[data-v2]').forEach(b => b.onclick = () => applyCard(x, v[+b.dataset.v2]));
+}
+async function applyCard(x, v){
+  const d = x.d;
+  $('#f_name').value = d.name;
+  $('#f_brand').value = 'Pokémon';
+  if (!CARD_TYPES.includes($('#f_type').value)) $('#f_type').value = 'Carte';
+  $('#f_edition').value = [d.set?.name, v?.label].filter(Boolean).join(' · ');
+  $('#f_serial').value = cardNum(d);
+  if (v?.price) $('#f_value').value = Math.round(v.price * 100) / 100;
+  draftRef = {src:'tcgdex', id:d.id, variant:v?.label||'', priceAt:v?.at||null};
+  $('#finder').innerHTML = `<div class="finder"><div class="hint">✔ Compilato da archivio${v?.price ? ` · valore = media Cardmarket${v.at ? ' del '+new Date(v.at).toLocaleDateString('it-IT') : ''}` : ''}. Controlla e salva.</div></div>`;
+  $('#f_name').dispatchEvent(new Event('input'));
+  $('#f_find').hidden = false;
+  if (x.img) {
+    $('#f_thumb').textContent = '⏳';
+    try { const blob = await fetch(`${x.img}/high.webp`).then(r => { if (!r.ok) throw 0; return r.blob(); }); draftPhoto = await shrink(blob); }
+    catch { toast('Foto non scaricata: puoi aggiungerla a mano'); }
+    $('#f_thumb').innerHTML = draftPhoto ? `<img src="${draftPhoto}" alt="">` : '📷';
+  }
+}
 
 /* Riduce le foto (max 640px, JPEG) così il telefono non si riempie con migliaia di oggetti */
 function shrink(file){
