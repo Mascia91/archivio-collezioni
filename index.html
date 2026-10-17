@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#6d4aff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Collezioni">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Archivio Collezioni</title>
+<style>
+:root{
+  --bg:#f4f3f8; --card:#ffffff; --ink:#1c1b29; --mute:#6c6a80; --line:#e3e1ee;
+  --accent:#6d4aff; --accent-ink:#ffffff; --warn:#b45309; --warn-bg:#fff4d6; --danger:#c2253b;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#12121c; --card:#1d1d2c; --ink:#f0eff8; --mute:#9b99b3; --line:#2c2c42;
+    --accent:#8b6dff; --accent-ink:#ffffff; --warn:#fbbf24; --warn-bg:#3a2e0e; --danger:#ff6b81; color-scheme:dark; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px max(16px,env(safe-area-inset-right)) 8px max(16px,env(safe-area-inset-left));padding-top:calc(14px + env(safe-area-inset-top))}
+h1{margin:0;font-size:22px;letter-spacing:-.3px}
+.sub{color:var(--mute);font-size:13px;margin-top:2px}
+main{padding:0 max(16px,env(safe-area-inset-right)) 16px max(16px,env(safe-area-inset-left));max-width:720px;margin:0 auto}
+input,select,textarea,button{font:inherit;color:inherit}
+.field{width:100%;padding:12px 14px;border:1px solid var(--line);background:var(--card);border-radius:12px;outline:none}
+.field:focus{border-color:var(--accent)}
+label{display:block;font-size:13px;color:var(--mute);margin:12px 0 4px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips.types{padding-top:6px}
+.chip{flex:0 0 auto;border:1px solid var(--line);background:var(--card);padding:7px 13px;border-radius:99px;font-size:14px;cursor:pointer}
+.chips.types .chip{padding:5px 11px;font-size:13px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.stats{display:flex;gap:10px;margin:10px 0}
+.stat{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.stat b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--mute)}
+.list{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.item{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;cursor:pointer;text-align:left;width:100%}
+.thumb{flex:0 0 56px;width:56px;height:56px;border-radius:10px;background:var(--line);display:grid;place-items:center;font-size:26px;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.meta{flex:1;min-width:0}
+.name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.line2{font-size:13px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.right{text-align:right;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.qty{display:inline-block;background:var(--accent);color:var(--accent-ink);border-radius:99px;font-size:12px;padding:1px 8px;margin-top:3px}
+.empty{text-align:center;color:var(--mute);padding:40px 10px}
+.btn{border:0;background:var(--accent);color:var(--accent-ink);padding:13px 16px;border-radius:12px;font-weight:600;cursor:pointer;width:100%;text-decoration:none;display:inline-block;text-align:center}
+.btn.sec{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:var(--card);color:var(--danger);border:1px solid var(--line)}
+.btn.small{width:auto;padding:8px 12px;font-size:14px}
+.row{display:flex;gap:10px}
+.row>*{flex:1;min-width:0}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px max(8px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));z-index:6}
+nav button{flex:1;border:0;background:none;padding:6px 0;font-size:11px;color:var(--mute);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button i{font-style:normal;font-size:22px}
+nav button.on{color:var(--accent)}
+nav button.plus i{background:var(--accent);color:var(--accent-ink);width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:28px;margin-top:-18px;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;display:none}
+.sheet-bg.open{display:block}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:94vh;overflow:auto;background:var(--bg);border-radius:20px 20px 0 0;padding:16px max(16px,env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));max-width:720px;margin:0 auto}
+.sheet h2{margin:0 0 4px;font-size:19px}
+.dup{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:10px 12px;margin-top:12px;font-size:14px}
+.dup b{display:block;margin-bottom:4px}
+.dup .m{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0}
+.web{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.web a{border:1px solid var(--line);background:var(--card);color:var(--ink);text-decoration:none;padding:7px 12px;border-radius:99px;font-size:14px}
+.web a::after{content:" ↗";color:var(--mute)}
+.photo{display:flex;gap:12px;align-items:center;margin-top:6px}
+.photo .thumb{flex:0 0 76px;width:76px;height:76px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
+.card h3{margin:0 0 8px;font-size:15px}
+.bar{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:6px 0;border-bottom:1px solid var(--line)}
+.bar:last-child{border:0}
+.bar span:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.hint{font-size:13px;color:var(--mute);margin:6px 0 10px}
+.inline{display:flex;gap:8px;margin-top:8px}
+.inline .field{flex:1}
+.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;z-index:20;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Archivio Collezioni</h1>
+  <div class="sub" id="subtitle"></div>
+</header>
+<main id="main"></main>
+
+<nav>
+  <button data-v="coll" class="on"><i>📚</i>Collezione</button>
+  <button data-v="wish"><i>⭐</i>Mi manca</button>
+  <button class="plus" id="addBtn"><i>＋</i>Aggiungi</button>
+  <button data-v="more"><i>⚙️</i>Altro</button>
+</nav>
+
+<div class="sheet-bg" id="bg"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- Archivio (IndexedDB, regge migliaia di oggetti, funziona offline) ---------- */
+const DB = (() => {
+  let db;
+  const open = () => new Promise((res, rej) => {
+    if (db) return res(db);
+    const r = indexedDB.open('archivio-collezioni', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'id' });
+    r.onsuccess = () => { db = r.result; res(db); };
+    r.onerror = () => rej(r.error);
+  });
+  const tx = (mode, fn) => open().then(d => new Promise((res, rej) => {
+    const t = d.transaction('items', mode); const s = t.objectStore('items');
+    const out = fn(s); t.oncomplete = () => res(out.result !== undefined ? out.result : undefined); t.onerror = () => rej(t.error);
+  }));
+  return {
+    all: () => tx('readonly', s => s.getAll()),
+    put: it => tx('readwrite', s => s.put(it)),
+    del: id => tx('readwrite', s => s.delete(id)),
+    clear: () => tx('readwrite', s => s.clear()),
+    putMany: arr => open().then(d => new Promise((res, rej) => {
+      const t = d.transaction('items', 'readwrite'); const s = t.objectStore('items');
+      arr.forEach(x => s.put(x)); t.oncomplete = res; t.onerror = () => rej(t.error);
+    }))
+  };
+})();
+
+/* ---------- Brand e tipi ---------- */
+const BASE_BRANDS = ['Pokémon','Il Signore degli Anelli','Harry Potter','Minecraft','Stranger Things','Altro'];
+const ICONS = {'Pokémon':'⚡','Il Signore degli Anelli':'💍','Harry Potter':'🪄','Minecraft':'⛏️','Stranger Things':'🔦','Altro':'📦'};
+const TYPES = ['Carte','Box / booster','Fumetto / graphic novel','Libro','Funko','Action figure / statua','Peluche','Videogioco','Gadget','Vintage','Altro'];
+const CONDS = ['Nuovo / sigillato','Come nuovo','Ottimo','Buono','Usato','Rovinato'];
+const CARD_TYPES = ['Carte','Box / booster'];
+
+/* Le schede della prima versione avevano una "collezione" per tipo: la trasformo in brand + tipo */
+const OLD_COLL = {'Pokémon':['Pokémon',''],'Carte collezionabili':['Altro','Carte'],'Graphic novel':['Altro','Fumetto / graphic novel'],
+  'Funko':['Altro','Funko'],'Nerd':['Altro','Gadget'],'Vintage':['Altro','Vintage']};
+function migrate(i){
+  if (i.brand === undefined) {
+    const m = OLD_COLL[i.coll] || [i.coll || 'Altro', ''];
+    i.brand = m[0]; i.type = i.type || m[1]; delete i.coll; i._mig = true;
+  }
+  return i;
+}
+
+let items = [], view = 'coll', fBrand = 'Tutti', fType = 'Tutti', query = '';
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => (Number(n)||0).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+const icon = b => ICONS[b] || '📦';
+const brands = () => [...new Set([...BASE_BRANDS.filter(b => b !== 'Altro'), ...items.map(i => i.brand).filter(b => b && b !== 'Altro'), 'Altro'])];
+const types = () => [...new Set([...TYPES, ...items.map(i => i.type).filter(Boolean)])];
+const pcs = l => l.reduce((a,i)=>a+(+i.qty||1),0);
+const sum = (l,k) => l.reduce((a,i)=>a+(+i[k]||0)*(+i.qty||1),0);
+function toast(t){ const e=$('#toast'); e.textContent=t; e.classList.add('show'); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove('show'),2400); }
+
+/* ---------- Doppioni ---------- */
+function findDups(name, brand, selfId, serial){
+  const n = norm(name), sn = norm(serial);
+  if (n.length < 3 && !sn) return [];
+  return items.filter(i => i.id !== selfId && (() => {
+    if (sn && norm(i.serial) === sn && (!brand || i.brand === brand)) return true;
+    if (n.length < 3) return false;
+    const m = norm(i.name);
+    if (!m) return false;
+    if (m === n) return true;
+    return i.brand === brand && n.length >= 5 && (m.includes(n) || n.includes(m));
+  })());
+}
+
+/* ---------- Ricerca sul web: apre il sito con l'oggetto già cercato ---------- */
+function webLinks(name, brand, type, edition){
+  const q = [name, edition, brand && brand !== 'Altro' && !norm(name).includes(norm(brand)) ? brand : ''].filter(Boolean).join(' ').trim();
+  if (norm(q).length < 3) return '';
+  const e = encodeURIComponent(q);
+  const l = [];
+  if (brand === 'Pokémon' && (CARD_TYPES.includes(type) || !type)) l.push(['Cardmarket', `https://www.cardmarket.com/it/Pokemon/Products/Search?searchString=${encodeURIComponent([name, edition].filter(Boolean).join(' '))}`]);
+  else if (CARD_TYPES.includes(type)) l.push(['Cardmarket', `https://www.cardmarket.com/it/Search?searchString=${encodeURIComponent(name)}`]);
+  l.push(['eBay', `https://www.ebay.it/sch/i.html?_nkw=${e}`],
+         ['Vinted', `https://www.vinted.it/catalog?search_text=${e}`],
+         ['Subito', `https://www.subito.it/annunci-italia/vendita/usato/?q=${e}`],
+         ['Amazon', `https://www.amazon.it/s?k=${e}`],
+         ['Google Immagini', `https://www.google.com/search?tbm=isch&q=${e}`]);
+  return l.map(([t,u]) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`).join('');
+}
+
+/* ---------- Viste ---------- */
+function render(){
+  document.querySelectorAll('nav button[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === view));
+  const owned = items.filter(i => !i.wish), wish = items.filter(i => i.wish);
+  $('#subtitle').textContent = `${pcs(owned)} pezzi · ${owned.length} schede · ${wish.length} in lista desideri`;
+  if (view === 'more') return renderMore();
+  const isWish = view === 'wish';
+  $('#title').textContent = isWish ? 'Mi manca' : 'Archivio Collezioni';
+  const base = isWish ? wish : owned;
+  const inBrand = base.filter(i => fBrand === 'Tutti' || i.brand === fBrand);
+  const list = inBrand.filter(i => (fType === 'Tutti' || i.type === fType) &&
+    (!query || norm([i.name,i.notes,i.brand,i.type,i.edition,i.serial,i.where].join(' ')).includes(norm(query)))).sort((a,b)=>b.added-a.added);
+  const usedB = ['Tutti', ...brands().filter(b => base.some(i => i.brand === b))];
+  const usedT = types().filter(t => inBrand.some(i => i.type === t));
+  const worth = sum(list,'value');
+  $('#main').innerHTML = `
+    <input class="field" id="q" type="search" placeholder="Cerca per nome, edizione, numero di serie…" value="${esc(query)}">
+    <div class="chips">${usedB.map(b => `<button class="chip ${b===fBrand?'on':''}" data-b="${esc(b)}">${b==='Tutti'?'Tutti i brand':icon(b)+' '+esc(b)}</button>`).join('')}</div>
+    ${usedT.length > 1 ? `<div class="chips types">${['Tutti',...usedT].map(t => `<button class="chip ${t===fType?'on':''}" data-t="${esc(t)}">${t==='Tutti'?'Tutti i tipi':esc(t)}</button>`).join('')}</div>` : ''}
+    <div class="stats">
+      <div class="stat"><b>${pcs(list)}</b><span>pezzi mostrati</span></div>
+      <div class="stat"><b>${money(sum(list,'price'))}</b><span>${isWish?'costo stimato':'speso'}</span></div>
+      ${worth?`<div class="stat"><b>${money(worth)}</b><span>valore stimato</span></div>`:''}
+    </div>
+    <div class="list">${list.length ? list.map(row).join('') : `<div class="empty">${base.length ? 'Nessun risultato.' : isWish ? 'La lista è vuota.<br>Aggiungi ciò che ti manca con il tasto ＋ e spunta “Non ce l’ho ancora”.' : 'Ancora nessun oggetto.<br>Premi ＋ per aggiungere il primo, oppure carica gli esempi da “Altro”.'}</div>`}</div>`;
+  const q = $('#q');
+  q.oninput = () => { query = q.value; const p=q.selectionStart; render(); const n=$('#q'); n.focus(); n.setSelectionRange(p,p); };
+  document.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { fBrand = b.dataset.b; fType = 'Tutti'; render(); });
+  document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { fType = b.dataset.t; render(); });
+  document.querySelectorAll('.item').forEach(b => b.onclick = () => openForm(b.dataset.id));
+}
+function row(i){
+  const sub = [i.brand, i.type, i.edition, i.cond].filter(Boolean).map(esc).join(' · ');
+  return `<button class="item" data-id="${i.id}">
+    <div class="thumb">${i.photo ? `<img src="${i.photo}" alt="">` : icon(i.brand)}</div>
+    <div class="meta"><div class="name">${esc(i.name)}</div><div class="line2">${sub}</div></div>
+    <div class="right">${i.price?money(i.price):''}${(+i.qty||1)>1?`<br><span class="qty">×${i.qty}</span>`:''}</div></button>`;
+}
+
+function renderMore(){
+  $('#title').textContent = 'Altro';
+  const owned = items.filter(i => !i.wish);
+  const by = brands().map(b => { const l = owned.filter(i => i.brand === b); return {b, n:pcs(l), s:sum(l,'price'), w:sum(l,'value')}; }).filter(x => x.n);
+  const hasDemo = items.some(i => i.demo);
+  $('#main').innerHTML = `
+    <div class="card"><h3>Riepilogo per brand</h3>
+      ${by.length ? by.map(x=>`<div class="bar"><span>${icon(x.b)} ${esc(x.b)}</span><span><b>${x.n}</b> pz · ${money(x.s)}${x.w?' · vale '+money(x.w):''}</span></div>`).join('') : '<div class="hint">Niente da mostrare per ora.</div>'}
+    </div>
+    <div class="card"><h3>Backup (importantissimo)</h3>
+      <div class="hint">I dati stanno su questo telefono. Fai un backup ogni tanto e salvalo su Drive o Google Foto: se cambi telefono lo ripristini da qui. Funziona anche con i backup della versione precedente.</div>
+      <div class="row"><button class="btn" id="bk">Salva backup</button><button class="btn sec" id="rs">Ripristina</button></div>
+      <input type="file" id="rsf" accept=".json,application/json" hidden>
+      <div style="height:10px"></div>
+      <button class="btn sec" id="csv">Esporta per Excel (CSV)</button>
+    </div>
+    <div class="card"><h3>Esempi di prova</h3>
+      <div class="hint">Per vedere subito come funziona. Gli esempi si tolgono con un tocco, senza toccare i tuoi oggetti veri.</div>
+      ${hasDemo ? '<button class="btn danger" id="dm">Rimuovi gli esempi</button>' : '<button class="btn sec" id="dm">Carica gli esempi</button>'}
+    </div>`;
+  $('#bk').onclick = backup; $('#csv').onclick = exportCsv;
+  $('#rs').onclick = () => $('#rsf').click();
+  $('#rsf').onchange = e => restore(e.target.files[0]);
+  $('#dm').onclick = hasDemo ? removeDemo : loadDemo;
+}
+
+/* ---------- Scheda (aggiungi / modifica) ---------- */
+let draftPhoto = '';
+function opts(list, cur, empty){
+  return (empty ? `<option value="">${empty}</option>` : '') + list.map(x => `<option ${x===cur?'selected':''}>${esc(x)}</option>`).join('');
+}
+function openForm(id, presetWish){
+  const it = id ? items.find(x => x.id === id) : null;
+  draftPhoto = it?.photo || '';
+  const curB = it?.brand || (fBrand !== 'Tutti' ? fBrand : brands()[0]);
+  const curT = it ? (it.type || '') : (fType !== 'Tutti' ? fType : '');
+  $('#sheet').innerHTML = `
+    <h2>${it ? 'Modifica oggetto' : 'Nuovo oggetto'}</h2>
+    <label for="f_name">Nome</label><input class="field" id="f_name" value="${esc(it?.name)}" placeholder="Es. Charizard Base Set, Bacchetta di Silente…" autocomplete="off">
+    <div id="dupbox"></div>
+    <div class="row">
+      <div><label for="f_brand">Brand</label><select class="field" id="f_brand">${opts(brands(), curB)}<option value="__new">＋ Nuovo brand…</option></select></div>
+      <div><label for="f_type">Tipo</label><select class="field" id="f_type">${opts(types(), curT, '—')}<option value="__new">＋ Nuovo tipo…</option></select></div>
+    </div>
+    <div id="newbox" class="inline" hidden><input class="field" id="f_newname" autocomplete="off"><button class="btn small" id="f_newok" type="button">Aggiungi</button></div>
+    <div class="row">
+      <div><label for="f_cond">Condizione</label><select class="field" id="f_cond">${opts(CONDS, it?.cond, '—')}</select></div>
+      <div><label for="f_qty">Quantità</label><input class="field" id="f_qty" type="number" min="1" inputmode="numeric" value="${it?.qty||1}"></div>
+    </div>
+    <div class="row">
+      <div><label for="f_price">Prezzo pagato (€ a pezzo)</label><input class="field" id="f_price" type="number" min="0" step="0.01" inputmode="decimal" value="${it?.price||''}" placeholder="0,00"></div>
+      <div><label for="f_value">Valore stimato (€ a pezzo)</label><input class="field" id="f_value" type="number" min="0" step="0.01" inputmode="decimal" value="${it?.value||''}" placeholder="0,00"></div>
+    </div>
+    <div class="row">
+      <div><label for="f_edition">Edizione</label><input class="field" id="f_edition" value="${esc(it?.edition)}" placeholder="Es. 1ª ed., Base Set" autocomplete="off"></div>
+      <div><label for="f_serial">Numero di serie</label><input class="field" id="f_serial" value="${esc(it?.serial)}" placeholder="Es. 4/102, #03" autocomplete="off"></div>
+    </div>
+    <label for="f_where">Dove l'hai preso</label><input class="field" id="f_where" value="${esc(it?.where)}" placeholder="Es. Lucca Comics, eBay, mercatino" autocomplete="off">
+    <label for="f_notes">Note (difetti, dettagli…)</label><textarea class="field" id="f_notes" rows="2">${esc(it?.notes)}</textarea>
+    <label>Cerca prezzo e immagini sul web</label>
+    <div class="web" id="weblinks"></div>
+    <label>Foto</label>
+    <div class="photo"><div class="thumb" id="f_thumb">${draftPhoto?`<img src="${draftPhoto}" alt="">`:'📷'}</div>
+      <div style="flex:1"><button class="btn sec small" id="f_pick" type="button">Scatta / scegli foto</button>
+      ${draftPhoto?'<button class="btn danger small" id="f_nophoto" type="button" style="margin-left:6px">Togli</button>':''}</div>
+      <input type="file" id="f_file" accept="image/*" hidden></div>
+    <label style="display:flex;align-items:center;gap:10px;color:var(--ink);margin-top:16px"><input type="checkbox" id="f_wish" ${(it?.wish??presetWish)?'checked':''} style="width:20px;height:20px"> ⭐ Non ce l'ho ancora (lista “Mi manca”)</label>
+    <div style="height:16px"></div>
+    <div class="row"><button class="btn sec" id="f_cancel" type="button">Annulla</button><button class="btn" id="f_save" type="button">Salva</button></div>
+    ${it?'<div style="height:10px"></div><button class="btn danger" id="f_del" type="button">Elimina</button>':''}`;
+  $('#bg').classList.add('open');
+  $('#sheet').scrollTop = 0;
+
+  const upd = () => {
+    const name = $('#f_name').value, brand = $('#f_brand').value;
+    $('#weblinks').innerHTML = webLinks(name.trim(), brand, $('#f_type').value, $('#f_edition').value.trim()) || '<span class="hint">Scrivi il nome per vedere i link.</span>';
+    const d = findDups(name, brand, it?.id, $('#f_serial').value);
+    $('#dupbox').innerHTML = d.length ? `<div class="dup"><b>⚠️ Attento, forse ce l'hai già:</b>${d.slice(0,4).map(x =>
+      `<div class="m"><span>${esc(x.name)} <small>(${esc(x.brand)}${x.type?' · '+esc(x.type):''}${x.wish?', in lista “Mi manca”':', ×'+(x.qty||1)}${x.price?', '+money(x.price):''})</small></span>
+       ${!it && !x.wish ? `<button class="btn small" data-plus="${x.id}" type="button">+1</button>` : ''}
+       ${!it && x.wish ? `<button class="btn small" data-got="${x.id}" type="button">Preso!</button>` : ''}</div>`).join('')}</div>` : '';
+    document.querySelectorAll('[data-plus]').forEach(b => b.onclick = async () => {
+      const x = items.find(i => i.id === b.dataset.plus); x.qty = (+x.qty||1)+1; await DB.put(x); closeForm(); await reload(); toast(`${x.name}: ora ×${x.qty}`);
+    });
+    document.querySelectorAll('[data-got]').forEach(b => b.onclick = async () => {
+      const x = items.find(i => i.id === b.dataset.got); x.wish = false; await DB.put(x); closeForm(); await reload(); toast('Spostato nella collezione 🎉');
+    });
+  };
+  ['f_name','f_serial','f_edition'].forEach(k => $('#'+k).oninput = upd);
+
+  /* Nuovo brand / nuovo tipo: campo nella scheda */
+  let adding = null;
+  const askNew = (sel, prev, ph) => { adding = {sel, prev}; $('#f_newname').value=''; $('#f_newname').placeholder = ph; $('#newbox').hidden = false; $('#f_newname').focus(); };
+  const confirmNew = () => {
+    if (!adding) return;
+    const n = $('#f_newname').value.trim(), s = $('#'+adding.sel);
+    if (n) { const o = document.createElement('option'); o.textContent = n; s.insertBefore(o, s.lastElementChild); s.value = n; }
+    else s.value = adding.prev;
+    adding = null; $('#newbox').hidden = true; upd();
+  };
+  let prevB = curB, prevT = curT;
+  $('#f_brand').onchange = () => { if ($('#f_brand').value === '__new') askNew('f_brand', prevB, 'Nome del brand (es. Star Wars)'); else prevB = $('#f_brand').value; upd(); };
+  $('#f_type').onchange = () => { if ($('#f_type').value === '__new') askNew('f_type', prevT, 'Nome del tipo (es. Poster)'); else prevT = $('#f_type').value; upd(); };
+  $('#f_newok').onclick = confirmNew;
+  $('#f_newname').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); confirmNew(); } };
+
+  $('#f_pick').onclick = () => $('#f_file').click();
+  $('#f_file').onchange = async e => {
+    if (!e.target.files[0]) return;
+    draftPhoto = await shrink(e.target.files[0]);
+    $('#f_thumb').innerHTML = draftPhoto ? `<img src="${draftPhoto}" alt="">` : '📷';
+  };
+  if ($('#f_nophoto')) $('#f_nophoto').onclick = () => { draftPhoto=''; $('#f_thumb').textContent='📷'; };
+  $('#f_cancel').onclick = closeForm;
+  if ($('#f_del')) $('#f_del').onclick = async () => {
+    if ($('#f_del').dataset.sure !== '1') { $('#f_del').dataset.sure = '1'; $('#f_del').textContent = 'Tocca ancora per eliminare davvero'; return; }
+    await DB.del(it.id); closeForm(); await reload(); toast('Eliminato');
+  };
+  $('#f_save').onclick = async () => {
+    if (adding) confirmNew();
+    const name = $('#f_name').value.trim();
+    if (!name) { $('#f_name').focus(); return toast('Scrivi almeno il nome'); }
+    const pick = v => v === '__new' ? '' : v;
+    const rec = { ...(it||{}), id: it?.id || uid(), name, brand: pick($('#f_brand').value) || 'Altro', type: pick($('#f_type').value),
+      cond: $('#f_cond').value, qty: Math.max(1, parseInt($('#f_qty').value)||1),
+      price: parseFloat($('#f_price').value)||0, value: parseFloat($('#f_value').value)||0,
+      edition: $('#f_edition').value.trim(), serial: $('#f_serial').value.trim(), where: $('#f_where').value.trim(),
+      notes: $('#f_notes').value.trim(), photo: draftPhoto, wish: $('#f_wish').checked, added: it?.added || Date.now() };
+    await DB.put(rec); closeForm(); await reload(); toast(it ? 'Modifiche salvate' : 'Aggiunto ✔');
+  };
+  upd();
+  if (!it) setTimeout(() => $('#f_name').focus(), 50);
+}
+function closeForm(){ $('#bg').classList.remove('open'); }
+
+/* Riduce le foto (max 640px, JPEG) così il telefono non si riempie con migliaia di oggetti */
+function shrink(file){
+  return new Promise(res => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 640 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width*k); c.height = Math.round(img.height*k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', .72));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); toast('Foto non leggibile'); res(''); };
+    img.src = url;
+  });
+}
+
+/* ---------- Backup / export ---------- */
+function download(name, blob){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+const stamp = () => new Date().toISOString().slice(0,10);
+function backup(){
+  download(`archivio-collezioni-${stamp()}.json`, new Blob([JSON.stringify({v:2, items})], {type:'application/json'}));
+  toast('Backup scaricato: mettilo al sicuro su Drive');
+}
+async function restore(file){
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); if (!Array.isArray(data.items)) throw 0; }
+  catch { return toast('Questo file non è un backup dell’archivio'); }
+  const recs = data.items.map(i => { migrate(i); delete i._mig; return i; });
+  await DB.putMany(recs); await reload(); toast(`Ripristinate ${recs.length} schede ✔`);
+}
+function exportCsv(){
+  const h = ['Nome','Brand','Tipo','Edizione','Numero di serie','Condizione','Quantità','Prezzo pagato','Valore stimato','Dove preso','Note','Lista desideri'];
+  const q = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
+  const n = v => String(v||0).replace('.',',');
+  const rows = items.map(i => [i.name,i.brand,i.type,i.edition,i.serial,i.cond,i.qty||1,n(i.price),n(i.value),i.where,i.notes,i.wish?'sì':'no'].map(q).join(';'));
+  download(`collezioni-${stamp()}.csv`, new Blob([String.fromCharCode(0xFEFF) + [h.map(q).join(';'), ...rows].join('\r\n')], {type:'text/csv;charset=utf-8'}));
+  toast('CSV pronto per Excel');
+}
+
+/* ---------- Esempi ---------- */
+async function loadDemo(){
+  const d = (name, brand, type, cond, price, qty, edition, serial, wish) => ({id:uid(), name, brand, type, cond, price, qty, edition, serial,
+    notes:'', photo:'', wish:!!wish, value:wish?0:Math.round(price*1.4), where:wish?'':'Fiera', added:Date.now()-Math.random()*1e9, demo:true});
+  await DB.putMany([
+    d('Charizard','Pokémon','Carte','Ottimo',85,1,'Base Set','4/102'),
+    d('Pikachu','Pokémon','Carte','Come nuovo',3,2,'Evoluzioni a Paldea','62/193'),
+    d('Booster Evoluzioni a Paldea','Pokémon','Box / booster','Nuovo / sigillato',5.5,6,'',''),
+    d('Pikachu Funko Pop','Pokémon','Funko','Nuovo / sigillato',15,1,'','#353'),
+    d('Gandalf il Grigio Funko Pop','Il Signore degli Anelli','Funko','Buono',14,1,'','#443'),
+    d('Lo Hobbit, edizione illustrata','Il Signore degli Anelli','Libro','Ottimo',30,1,'Bompiani',''),
+    d('Bacchetta di Silente','Harry Potter','Gadget','Come nuovo',35,1,'Noble Collection',''),
+    d('Harry Potter e la Pietra Filosofale','Harry Potter','Libro','Usato',12,1,'1ª ed. Salani',''),
+    d('Creeper peluche','Minecraft','Peluche','Buono',9,1,'',''),
+    d('Demogorgon Funko Pop','Stranger Things','Funko','Nuovo / sigillato',16,1,'','#428'),
+    d('Mew Gold Star','Pokémon','Carte','',0,1,'Holon Phantoms','111/110',true),
+    d('Eleven con Eggo Funko Pop','Stranger Things','Funko','',0,1,'','#421',true)
+  ]);
+  await reload(); toast('Esempi caricati');
+}
+async function removeDemo(){
+  for (const i of items.filter(i => i.demo)) await DB.del(i.id);
+  await reload(); toast('Esempi rimossi');
+}
+
+/* ---------- Avvio ---------- */
+async function reload(){
+  items = (await DB.all()).map(migrate);
+  const mig = items.filter(i => i._mig);
+  if (mig.length) { mig.forEach(i => delete i._mig); await DB.putMany(mig); }
+  if (fBrand !== 'Tutti' && !items.some(i => i.brand === fBrand)) { fBrand = 'Tutti'; fType = 'Tutti'; }
+  render();
+}
+document.querySelectorAll('nav button[data-v]').forEach(b => b.onclick = () => { view = b.dataset.v; fBrand = 'Tutti'; fType = 'Tutti'; query = ''; render(); window.scrollTo(0,0); });
+$('#addBtn').onclick = () => openForm(null, view === 'wish');
+$('#bg').onclick = e => { if (e.target === $('#bg')) closeForm(); };
+reload().catch(() => { $('#main').innerHTML = '<div class="empty">Questo browser non permette di salvare i dati (navigazione privata?). Apri l\'app in una scheda normale.</div>'; });
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
